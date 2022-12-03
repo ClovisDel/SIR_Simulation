@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import altair as alt
 import plotly.express as px
-from PIL import Image
+
 
 from models import *
 
@@ -24,16 +24,16 @@ def IHM():
 
     st.sidebar.markdown("## Paramètres")
 
-    
-
     if choix_page == "Présentation" :
         load_page_accueil()
 
     elif choix_page == "Modèle SIR classique" :
         N = st.sidebar.slider("Taille de la population :", min_value=50, max_value=1000, value=500, step=50)
         tmax = st.sidebar.slider("Durée de la simulation (en jours) :", min_value=30, max_value=365, value=100, step=5)
-
-        load_page_sir_classique(N, tmax)
+        geste_barriere = st.sidebar.checkbox("Gestes barrières")
+        confinement = st.sidebar.checkbox("Confinement") 
+        
+        load_page_sir_classique(N, tmax, geste_barriere, confinement, None)
 
     elif choix_page == "Modèle SIRCVD" :
         N = st.sidebar.slider("Taille de la population :", min_value=50, max_value=1000, value=500, step=50)
@@ -57,31 +57,93 @@ def IHM():
         vaccination =  st.sidebar.checkbox("Vaccination")
         load_page_sir_modif_echange(N, tmax, geste_barriere, confinement, vaccination)
 
-def model_rk4_SIR(N, tmax):
+def model_rk4_SIR(N, tmax, geste_barriere, confinement, vaccination):
     I0, R0 = 1, 0                                                               # On initialise le nombre d'infectés et de recovered	
     S0 = N - I0 - R0                                                            # On initialise le nombre de sains                       
 
-    beta, lambd = 0.4, 10                                                       # On initialise les paramètres du modèle               
-    facteur = [beta, lambd]                                                     # On met les paramètres dans un vecteur                      
+    B, lambd = 0.4, 10                                                       # On initialise les paramètres du modèle                     
     delta = 2                                                                   # On initialise le pas de temps                        
+
+    if geste_barriere:                                                          # Si on a coché la case geste barrière > on diminue le taux de transmission                   
+        B = B*(1 - 0.4) 
+    else :                                                                      # Sinon on garde les taux de transmission initiaux              
+        #B = B
+        pass
 
     Nt = tmax                                                                   # On initialise le nombre de points de la grille                       
     t = np.linspace(0, tmax, Nt+1)                                              # On initialise la grille de temps        
 
     X0 = S0, I0, R0                                                             # On initialise le vecteur d'état initial            
-
-    model_rk4 = rk4(SIR, X0, t, N, delta, facteur)                              # On résout le système d'équations différentielles avec la méthode rk4      
+                  
+    facteur = [B, lambd]                                                        # On met les paramètres dans un vecteur  
+    model_rk4 = rk4(SIR, X0, t, N, delta, facteur, geste_barriere, confinement, vaccination)                              # On résout le système d'équations différentielles avec la méthode rk4      
 
     return t, model_rk4
 
-def model_rk4_SIRCVD(N, tmax, geste_barriere, confinement, vaccination, model):
+def model_rk4_SIRCVD(N, tmax, geste_barriere, confinement, vaccination):
     # facteur = [B, Nu, mu, lambd, alpha, tau] avec B, mu, lambda vecteur
+    # [Sn, Sr, Vn, Vr]
     B = [0.5, 0.6, 0.2, 0.3]
-    Nu = 7
-    mu = [0.0001, 0.05, 0.005, 0.01]
+    Nu = 5
+    mu = [0.002, 0.003, 0.001, 0.001]
+    #mu = [0, 0, 0, 0]
+    eta = 0.5
     lambd = [10, 10, 10, 10]
-    alpha = 100
+    alpha = 500
     tau = 10
+
+    if geste_barriere:                                                          # Si on a coché la case geste barrière > on diminue le taux de transmission                   
+        B = [B[i]*(1 - 0.4) for i in range(len(B))]
+    else :                                                                      # Sinon on garde les taux de transmission initiaux              
+        #B = B
+        pass
+
+    facteur = [B, Nu, mu, eta, lambd, alpha, tau]                                    # On met les paramètres dans un vecteur
+    
+    Nt = tmax                                                                   # On initialise le nombre de points de la grille    
+    t = np.linspace(0, tmax, Nt+1)                                              # On initialise la grille de temps
+
+    delta = 2                                                                   # On initialise le pas de temps                        
+
+    Isn0, Ivn0, Isr0, Ivr0 = 1, 1, 1, 1                                         # On initialise le nombre d'infectés    
+    I0 = Isn0 + Ivn0 + Isr0 + Ivr0                                         
+
+    Rn0, Rr0 = 0, 0                                                             # On initialise le nombre de recovered               
+    R0 = Rn0 + Rr0                                         
+
+    Sn0, Sr0 = (N - I0 - R0)/2, (N - I0 - R0)/2                                 # On initialise le nombre de sains
+    S0 = Sn0 + Sr0                                      
+
+    Vn0 = Vr0 = 0                                                               # On initialise le nombre de vaccinés          
+    V0 = Vn0 + Vr0                         
+
+    Csn, Csr0, Cvn0, Cvr0 = 0, 0, 0, 0                                          # On initialise le nombre de cas confirmés   
+    C0 = Csn + Csr0 + Cvn0 + Cvr0           
+
+    Dn0, Dr0 = 0, 0                                                             # On initialise le nombre de décès 
+    D0 = Dn0 + Dr0
+
+    X0 = Sn0, Sr0, Vn0, Vr0, Csn, Csr0, Cvn0, Cvr0, Isn0, Ivn0, Isr0, Ivr0, Rn0, Rr0, Dn0, Dr0 # On initialise le vecteur d'état initial
+
+
+    model_rk4 = rk4(SIRCVD, X0, t, N, delta, facteur, geste_barriere, confinement, vaccination) # On résout le système d'équations différentielles avec la méthode rk4
+    
+    
+    return t,model_rk4
+
+
+def model_rk4_SIRCVD_echange(N, tmax, geste_barriere, confinement, vaccination):
+
+    # [Sn, Sr, Vn, Vr]
+    B = [0.5, 0.6, 0.2, 0.3]
+    Nu = 5
+    mu = [0.002, 0.003, 0.001, 0.001]
+    #mu = [0, 0, 0, 0]
+    eta = 0.5
+    lambd = [10, 10, 10, 10]
+    alpha = 500
+    tau = 10
+    echange = 0.2
 
     if geste_barriere:                                                          # Si on a coché la case geste barrière > on diminue le taux de transmission                   
         B = [B[i]*(1 - 0.2) for i in range(len(B))]
@@ -89,84 +151,57 @@ def model_rk4_SIRCVD(N, tmax, geste_barriere, confinement, vaccination, model):
         #B = B
         pass
 
-    facteur = [B, Nu, mu, lambd, alpha, tau]                                    # On met les paramètres dans un vecteur
+    facteur = [B, Nu, mu, eta, lambd, alpha, tau, echange]                                    # On met les paramètres dans un vecteur
     
     Nt = tmax                                                                   # On initialise le nombre de points de la grille    
     t = np.linspace(0, tmax, Nt+1)                                              # On initialise la grille de temps
 
-    delta = 2                                                                   # On initialise le pas de temps                        
-    if model == "SIRCVD":
-
-        Isn0, Ivn0, Isr0, Ivr0 = 1, 1, 1, 1                                         # On initialise le nombre d'infectés    
-        I0 = Isn0 + Ivn0 + Isr0 + Ivr0                                         
-
-        Rn0, Rr0 = 0, 0                                                             # On initialise le nombre de recovered               
-        R0 = Rn0 + Rr0                                         
-
-        Sn0, Sr0 = (N - I0 - R0)/2, (N - I0 - R0)/2                                 # On initialise le nombre de sains
-        S0 = Sn0 + Sr0                                      
-
-        Vn0 = Vr0 = 0                                                               # On initialise le nombre de vaccinés          
-        V0 = Vn0 + Vr0                         
-
-        Csn, Csr0, Cvn0, Cvr0 = 0, 0, 0, 0                                          # On initialise le nombre de cas confirmés   
-        C0 = Csn + Csr0 + Cvn0 + Cvr0           
-
-        Dn0, Dr0 = 0, 0                                                             # On initialise le nombre de décès 
-        D0 = Dn0 + Dr0
-
-        X0 = Sn0, Sr0, Vn0, Vr0, Csn, Csr0, Cvn0, Cvr0, Isn0, Ivn0, Isr0, Ivr0, Rn0, Rr0, Dn0, Dr0 # On initialise le vecteur d'état initial
-
-        model_rk4 = rk4(SIRCVD, X0, t, N, delta, facteur, geste_barriere, confinement, vaccination) # On résout le système d'équations différentielles avec la méthode rk4
-    
-    elif model == "SIRCVD_echange":
+    delta = 2                                                                   # On initialise le pas de temps 
         
-        # On initie la premiere population
-        Isn0, Ivn0, Isr0, Ivr0 = 1, 1, 1, 1                                         # On initialise le nombre d'infectés    
-        I0 = Isn0 + Ivn0 + Isr0 + Ivr0                                         
+    # On initie la premiere population
+    Isn0, Ivn0, Isr0, Ivr0 = 1, 1, 1, 1                                         # On initialise le nombre d'infectés    
+    I0 = Isn0 + Ivn0 + Isr0 + Ivr0                                         
 
-        Rn0, Rr0 = 0, 0                                                             # On initialise le nombre de recovered               
-        R0 = Rn0 + Rr0                                         
+    Rn0, Rr0 = 0, 0                                                             # On initialise le nombre de recovered               
+    R0 = Rn0 + Rr0                                         
 
-        Sn0, Sr0 = (N[0] - I0 - R0)/2, (N[0] - I0 - R0)/2                           # On initialise le nombre de sains
-        S0 = Sn0 + Sr0                                      
+    Sn0, Sr0 = (N[0] - I0 - R0)/2, (N[0] - I0 - R0)/2                           # On initialise le nombre de sains
+    S0 = Sn0 + Sr0                                      
 
-        Vn0 = Vr0 = 0                                                               # On initialise le nombre de vaccinés          
-        V0 = Vn0 + Vr0                         
+    Vn0 = Vr0 = 0                                                               # On initialise le nombre de vaccinés          
+    V0 = Vn0 + Vr0                         
 
-        Csn, Csr0, Cvn0, Cvr0 = 0, 0, 0, 0                                          # On initialise le nombre de cas confirmés   
-        C0 = Csn + Csr0 + Cvn0 + Cvr0           
+    Csn, Csr0, Cvn0, Cvr0 = 0, 0, 0, 0                                          # On initialise le nombre de cas confirmés   
+    C0 = Csn + Csr0 + Cvn0 + Cvr0           
 
-        Dn0, Dr0 = 0, 0                                                             # On initialise le nombre de décès 
-        D0 = Dn0 + Dr0
+    Dn0, Dr0 = 0, 0                                                             # On initialise le nombre de décès 
+    D0 = Dn0 + Dr0
 
 
-        # On initie la deuxième population
-        Isn_P0, Ivn_P0, Isr_P0, Ivr_P0 = 1, 1, 1, 1                                 # On initialise le nombre d'infectés    
-        I_P0 = Isn_P0 + Ivn_P0 + Isr_P0 + Ivr_P0                                         
+    # On initie la deuxième population
+    Isn_P0, Ivn_P0, Isr_P0, Ivr_P0 = 0, 0, 0, 0                                 # On initialise le nombre d'infectés    
+    I_P0 = Isn_P0 + Ivn_P0 + Isr_P0 + Ivr_P0                                         
 
-        Rn_P0, Rr_P0 = 0, 0                                                         # On initialise le nombre de recovered               
-        R_P0 = Rn_P0 + Rr_P0                                         
+    Rn_P0, Rr_P0 = 0, 0                                                         # On initialise le nombre de recovered               
+    R_P0 = Rn_P0 + Rr_P0                                         
 
-        Sn_P0, Sr_P0 = (N[1] - I_P0 - R_P0)/2, (N[1] - I_P0 - R_P0)/2               # On initialise le nombre de sains
-        S_P0 = Sn_P0 + Sr_P0                                      
+    Sn_P0, Sr_P0 = (N[1] - I_P0 - R_P0)/2, (N[1] - I_P0 - R_P0)/2               # On initialise le nombre de sains
+    S_P0 = Sn_P0 + Sr_P0                                      
 
-        Vn0 = Vr0 = 0                                                               # On initialise le nombre de vaccinés          
-        V_P0 = Vn0 + Vr0                         
+    Vn0 = Vr0 = 0                                                               # On initialise le nombre de vaccinés          
+    V_P0 = Vn0 + Vr0                         
 
-        Csn, Csr0, Cvn0, Cvr0 = 0, 0, 0, 0                                          # On initialise le nombre de cas confirmés   
-        C_P0 = Csn + Csr0 + Cvn0 + Cvr0           
+    Csn, Csr0, Cvn0, Cvr0 = 0, 0, 0, 0                                          # On initialise le nombre de cas confirmés   
+    C_P0 = Csn + Csr0 + Cvn0 + Cvr0           
 
-        Dn0, Dr0 = 0, 0                                                             # On initialise le nombre de décès 
-        D_P0 = Dn0 + Dr0
+    Dn0, Dr0 = 0, 0                                                             # On initialise le nombre de décès 
+    D_P0 = Dn0 + Dr0
 
-        X0 = Sn0, Sr0, Vn0, Vr0, Csn, Csr0, Cvn0, Cvr0, Isn0, Ivn0, Isr0, Ivr0, Rn0, Rr0, Dn0, Dr0, Sn_P0, Sr_P0, Vn0, Vr0, Csn, Csr0, Cvn0, Cvr0, Isn_P0, Ivn_P0, Isr_P0, Ivr_P0, Rn_P0, Rr_P0, Dn0, Dr0 # On initialise le vecteur d'état initial
+    X0 = Sn0, Sr0, Vn0, Vr0, Csn, Csr0, Cvn0, Cvr0, Isn0, Ivn0, Isr0, Ivr0, Rn0, Rr0, Dn0, Dr0, Sn_P0, Sr_P0, Vn0, Vr0, Csn, Csr0, Cvn0, Cvr0, Isn_P0, Ivn_P0, Isr_P0, Ivr_P0, Rn_P0, Rr_P0, Dn0, Dr0 # On initialise le vecteur d'état initial
         
-        model_rk4 = rk4(SIRCVD_echange, X0, t, N, delta, facteur, geste_barriere, confinement, vaccination)
-    return t,model_rk4
+    model_rk4 = rk4(SIRCVD_echange, X0, t, N, delta, facteur, geste_barriere, confinement, vaccination)
 
-
-
+    return t, model_rk4
 
 def affichage(t, S, I, R):
     df = pd.DataFrame ({"t" : t, "S": S, "I": I, "R": R})
@@ -206,10 +241,10 @@ def load_page_accueil():
 
 def espace_entre_parties():
     st.write("")
-    st.markdown("""<hr style="height:2px;width:90%;border:none;color:#333;background-color:#333;" /> """, unsafe_allow_html=True) 
+    st.markdown("""<hr style="height:2px;width:100%;border:none;color:#333;background-color:#333;" /> """, unsafe_allow_html=True) 
     st.write("")
 
-def load_page_sir_classique(N, tmax):
+def load_page_sir_classique(N, tmax, geste_barriere, confinement, vaccination):
     st.header("Simulation du modèle SIR")
 
     st.write("Le modèle SIR se base sur une notion de compartiments. "
@@ -236,15 +271,15 @@ def load_page_sir_classique(N, tmax):
 
     st.write("A l'aide de la méthode Runge-Kutta de degré 4 (RK4) on observer la simulation suivante :")
 
-    t, model_rk4_SIR_value = model_rk4_SIR(N, tmax) 
+    t, model_rk4_SIR_value = model_rk4_SIR(N, tmax, geste_barriere, confinement, vaccination) 
 
     S, I, R = model_rk4_SIR_value.T
-    affichage(t, S, I, R)
+    affichage(t, S, I, R) 
 
 
 def load_page_sir_modif(N, tmax, geste_barriere, confinement, vaccination): 
 
-    t, model_rka_SIRCVD_value = model_rk4_SIRCVD(N, tmax, geste_barriere, confinement, vaccination, "SIRCVD")
+    t, model_rka_SIRCVD_value = model_rk4_SIRCVD(N, tmax, geste_barriere, confinement, vaccination)
     Sn, Sr, Vn, Vr, Csn, Csr, Cvn, Cvr, Isn, Ivn, Isr, Ivr, Rn, Rr, Dn, Dr = model_rka_SIRCVD_value.T
 
     df_global = pd.DataFrame({"t" : t, "Sn": Sn, "Sr": Sr, "Vn": Vn, "Vr": Vr, "Csn": Csn, "Csr": Csr, "Cvn": Cvn, "Cvr": Cvr, "Isn": Isn, "Ivn": Ivn, "Isr": Isr, "Ivr": Ivr, "Rn": Rn, "Rr": Rr, "Dn": Dn, "Dr": Dr})
@@ -256,12 +291,12 @@ def load_page_sir_modif(N, tmax, geste_barriere, confinement, vaccination):
     V = (Vn + Vr).astype(int)
     C = (Csn + Csr + Cvn + Cvr).astype(int)
     D = (Dn + Dr).astype(int)
-
+    
     st.header("Simulation du modèle SIR adapté : SIRCVD")
 
-    st.markdown("<div align='center'><br>"
-                "<img src='model_SIRCVD.png' width='500' height='500' alt='Model-SIRCVD image problem' border='0'>"
-               ,unsafe_allow_html=True)
+    _, col2, _ = st.columns([2,6,1])
+    image_SIRCVD = "https://raw.githubusercontent.com/ClovisDel/SIR_Simulation/main/model_SIRCVD_simple.png?token=GHSAT0AAAAAAB2JO4ZGKWWDR6RDDBUPGJ2OY4LW6BA"
+    col2.image(image_SIRCVD, width = 700)
 
     espace_entre_parties()
 
@@ -284,6 +319,25 @@ def load_page_sir_modif(N, tmax, geste_barriere, confinement, vaccination):
     col2.write("> - τ le taux de rétablissement")
 
     espace_entre_parties()
+
+    st.write("L'ambition de ce modèle est de prendre en compte différents types de personnes.")
+    st.write("Dans un premier temps on veut considérer la différence entre les personnes dites 'à risque' et les personnes 'non à risque'. Ces deux populations vont se voir attribuer des taux de contaminations, de guérisons et de mortalité différents.")
+
+    st.write("Dans un second temps on veut prendre en compte les personnes vaccinées, on va donc considérer que les personnes vaccinées peuvent être contaminées mais avec un taux réduit. Leur taux de décès est également réduit et le taux de guérison est augmenté.")
+    
+    st.write("On découle sur un modèle qui superpose 4 groupes de personnes :")
+    st.write("> - Sn les sains non à rique")
+    st.write("> - Sr les sains à rique")
+    st.write("> - Vr les vaccinés non à rique")
+    st.write("> - Vn les vaccinés à rique")
+
+    st.write("D'une part, les sains peuvent se faire vaccinés. D'autres part un infecté quand il est retablis passe à vacciné.")
+    st.write("Dans ce modèle, on considère que les personnes décédées restent dans le modèle et ne sont plus comptabilisées dans les autres groupes.")
+
+    espace_entre_parties()
+
+    st.write("A l'aide de la méthode Runge-Kutta de degré 4 (RK4) on observer la simulation suivante :")
+
     df_global = pd.DataFrame ({"t" : t, "S": S, "V" : V, "C" : C, "I": I, "R": R, "D": D})
     fig_global = px.line(df_global, x="t", 
                     y=["S", "V", "C", "I", "R", "D"], 
@@ -318,7 +372,7 @@ def load_page_sir_modif(N, tmax, geste_barriere, confinement, vaccination):
                     },
     )    
     col1.plotly_chart(fig_global_sans_risque, use_container_width=True)
-    col1.write(df_global_sans_risque)
+    col1.dataframe(df_global_sans_risque)
 
     df_global_a_risque = pd.DataFrame ({"t" : t, "S": Sr, "V" : Vr, "C" : Csr + Cvr, "I": Isr + Ivr, "R": Rr, "D": Dr})
     fig_global_a_risque = px.line(df_global_a_risque, x="t", 
@@ -333,8 +387,63 @@ def load_page_sir_modif(N, tmax, geste_barriere, confinement, vaccination):
                     },
     )    
     col2.plotly_chart(fig_global_a_risque, use_container_width=True)
-    col2.write(df_global_a_risque)
+    col2.dataframe(df_global_a_risque)
     
 def load_page_sir_modif_echange(N, tmax, geste_barriere, confinement, vaccination):
-    t, model_rka_SIRCVD_echange_value = model_rk4_SIRCVD(N, tmax, geste_barriere, confinement, vaccination, "SIRCVD_echange") 
-    pass
+    t, model_rka_SIRCVD_echange_value = model_rk4_SIRCVD_echange(N, tmax, geste_barriere, confinement, vaccination) 
+    
+    Sn, Sr, Vn, Vr, Csn, Csr, Cvn, Cvr, Isn, Ivn, Isr, Ivr, Rn, Rr, Dn, Dr, Sn_P, Sr_P, Vn_P, Vr_P, Csn_P, Csr_P, Cvn_P, Cvr_P, Isn_P, Ivn_P, Isr_P, Ivr_P, Rn_P, Rr_P, Dn_P, Dr_P = model_rka_SIRCVD_echange_value.T
+
+    t = t.astype(int)
+    I = (Isn + Ivn + Isr + Ivr).astype(int)
+    R = (Rn + Rr).astype(int)
+    S = (Sn + Sr).astype(int)
+    V = (Vn + Vr).astype(int)
+    C = (Csn + Csr + Cvn + Cvr).astype(int)
+    D = (Dn + Dr).astype(int)
+    df_global = pd.DataFrame ({"t" : t, "S": S, "V" : V, "C" : C, "I": I, "R": R, "D": D})
+
+    I_P = (Isn_P + Ivn_P + Isr_P + Ivr_P).astype(int)
+    R_P = (Rn_P + Rr_P).astype(int)
+    S_P = (Sn_P + Sr_P).astype(int)
+    V_P = (Vn_P + Vr_P).astype(int)
+    C_P = (Csn_P + Csr_P + Cvn_P + Cvr_P).astype(int)
+    D_P = (Dn_P + Dr_P).astype(int)
+    df_global_P = pd.DataFrame ({"t" : t, "S": S_P, "V" : V_P, "C" : C_P, "I": I_P, "R": R_P, "D": D_P})
+    
+    fig_global = px.line(df_global, x="t", 
+                    y=["S", "V", "C", "I", "R", "D"], 
+                    title='Simulation du modèle SIRCVD first Pop',
+                    color_discrete_map={
+                        "S": "green",
+                        "V": "lightgreen",
+                        "C": "orange",
+                        "I": "red",
+                        "R": "darkgreen",
+                        "D": "black"
+                    },
+                    #markers = True
+    
+    )    
+    
+    fig_global_P = px.line(df_global_P, x="t", 
+                    y=["S", "V", "C", "I", "R", "D"], 
+                    title='Simulation du modèle SIRCVD Second Pop',
+                    color_discrete_map={
+                        "S": "green",
+                        "V": "lightgreen",
+                        "C": "orange",
+                        "I": "red",
+                        "R": "darkgreen",
+                        "D": "black"
+                    },
+                    #markers = True
+    
+    )    
+
+    col1, col2 = st.columns(2)
+
+    col1.dataframe(df_global)
+    col1.plotly_chart(fig_global, use_container_width=True)
+    col2.dataframe(df_global_P)
+    col2.plotly_chart(fig_global_P, use_container_width=True)
