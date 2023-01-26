@@ -349,10 +349,10 @@ def load_page_sircvd_echange(N, N_P, tmax, geste_barriere, confinement, vaccinat
 
         col1, col2, col3, col4, _, col6, col7, col8, col9= st.columns([3, 3, 3, 3, 1, 3, 3, 3, 3])
 
-        I_Sn_0 = col1.number_input("I(Sn)0 = ", value = 1, key="unique_key33")
-        I_Sr_0 = col2.number_input("I(Sr)0 = ", value = 1, key="unique_key34")
-        I_Vn_0 = col3.number_input("I(Vn)0 = ", value = 1, key="unique_key35")
-        I_Vr_0 = col4.number_input("I(Vr)0 = ", value = 1, key="unique_key36")
+        I_Sn_0 = col1.number_input("I(Sn)0 = ", value = 0, key="unique_key33")
+        I_Sr_0 = col2.number_input("I(Sr)0 = ", value = 0, key="unique_key34")
+        I_Vn_0 = col3.number_input("I(Vn)0 = ", value = 0, key="unique_key35")
+        I_Vr_0 = col4.number_input("I(Vr)0 = ", value = 0, key="unique_key36")
         R_n_0 = col1.number_input("R(n)0 = ", value = 0, key="unique_key37")
         R_r_0 = col2.number_input("R(r)0 = ", value = 0, key="unique_key38")
         D_n_0 = col3.number_input("D(n)0 = ", value = 0, key="unique_key39")
