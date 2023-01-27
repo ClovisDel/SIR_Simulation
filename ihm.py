@@ -307,8 +307,10 @@ def load_page_sircvd_echange(N, N_P, tmax, geste_barriere, confinement, vaccinat
     st.write("*Pour faciliter l'utilisation, les données et paramètres sont pré-remplis mais peuvent être modifiés en cliquant sur le bouton **Choix des paramètres**.*")
     
 
-    st.button(label = "Choix des paramètres", key = "button_choix_param")
-    if st.session_state.get("button_choix_param"):
+    #st.button(label = "Choix des paramètres", key = "button_choix_param")
+
+    #if st.button(label = "Choix des paramètres", key = "button_choix_param"):
+    if True : 
         col1, col2, col3, col4, _, col6, col7, col8, col9= st.columns([3, 3, 3, 3, 1, 3, 3, 3, 3])
         
         betaSn = col1.number_input("β(Sn) = ", value = 0.7, key="unique_key1")
