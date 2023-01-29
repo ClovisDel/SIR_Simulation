@@ -413,3 +413,7 @@ def load_page_sircvd_echange(N, N_P, tmax, geste_barriere, confinement, vaccinat
     espace_entre_parties()
 
     st.write("#### Conclusion :")
+
+    st.write("Dans notre modèle SIRCDV, notre population nationale ne comportent aucun infecté à t=0, on remarque que c’est lors du pic d’infection dans la population internationale que l’épidémie débute au sein de la population nationale. De plus, les échanges avec la population internationale limitent la rechute du nombre d’infectés au sein de la population nationale.")
+    st.write("Les scénarios s’appliquant de la même façon que précédemment on peut en déduire les mêmes retombés sur l’épidémie. ")
+    st.write("Ce qui est intéressant est de faire varier les paramètres de l’épidémie par pays. ")
