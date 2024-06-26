@@ -46,7 +46,7 @@ def load_data():
     return img_SIRCVD_path, img_SIRCVD_echange_path
 
 def IHM():
-    st.set_page_config(layout="wide")  
+    ##st.set_page_config(layout="wide")  
 
     st.sidebar.title("Menu")
 
